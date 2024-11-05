@@ -57,19 +57,16 @@ class samba::classic(
   $joinou                         = undef,
   Optional[String] $default_realm = undef,
   Array $additional_realms        = [],
-) inherits samba::params{
-
-
-  unless is_domain_name($realm){
+) inherits samba::params {
+  unless ($realm =~ Variant[Stdlib::Fqdn, Stdlib::Dns::Zone]) {
     fail('realm must be a valid domain')
   }
 
-  unless is_domain_name($realm){
-    fail('realm must be a valid domain')
+  unless ($smbname =~ String[1,15]) {
+    fail('smbname too short or too long')
   }
 
-  validate_slength($smbname, 15)
-  unless is_domain_name("${smbname}.${realm}"){
+  unless ("${smbname}.${realm}" =~ Variant[Stdlib::Fqdn, Stdlib::Dns::Zone]) {
     fail('smbname must be a valid domain')
   }
 
@@ -94,6 +91,12 @@ class samba::classic(
 
   $_default_realm = pick($default_realm, $realmuppercase)
 
+  if $manage_winbind {
+    $services_to_notify = ['SambaSmb', 'SambaWinBind']
+  }
+  else {
+    $services_to_notify = ['SambaSmb']
+  }
 
   file { '/etc/samba/':
     ensure  => 'directory',
@@ -111,7 +114,7 @@ class samba::classic(
         ensure  => present,
         mode    => '0644',
         content => template("${module_name}/krb5.conf.erb"),
-        notify  => Service['SambaSmb', 'SambaWinBind'],
+        notify  => Service[$services_to_notify];
       }
     }
 
@@ -281,12 +284,6 @@ class samba::classic(
   $mandatoryglobaloptionsindex = prefix(keys($mandatoryglobaloptions),
     '[global]')
 
-  if $manage_winbind {
-    $services_to_notify = ['SambaSmb', 'SambaWinBind']
-  }
-  else {
-    $services_to_notify = ['SambaSmb']
-  }
   samba::option{ $mandatoryglobaloptionsindex:
     options         => $mandatoryglobaloptions,
     section         => 'global',
